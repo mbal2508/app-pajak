@@ -76,8 +76,10 @@ import os
 import threading
 import time
 
+api_key = os.getenv("GEMINI_API_KEY")
+
 # Inisialisasi client Gemini (pastikan API Key sudah diset di environment variable)
-client = genai.Client(api_key="AQ.Ab8RN6JIJKsxY1jMkPIfJOXH-glc97i40FnGloxxvtz9AqImfQ")
+client = genai.Client(api_key=api_key)
 
 is_processing = False
 list_pembelian = []
