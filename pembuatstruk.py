@@ -73,59 +73,72 @@ import cv2
 from google import genai
 from PIL import Image
 import os
+import threading
+import time
 
 # Inisialisasi client Gemini (pastikan API Key sudah diset di environment variable)
 client = genai.Client(api_key="AQ.Ab8RN6JIJKsxY1jMkPIfJOXH-glc97i40FnGloxxvtz9AqImfQ")
 
-def deteksi_benda_dari_frame(frame):
-    """
-    Mengubah frame OpenCV (numpy array) menjadi gambar PIL,
-    lalu mengirimkannya ke Gemini untuk dideteksi nama dan harganya.
-    """
-    try:
-        # Konversi warna dari BGR (OpenCV) ke RGB (PIL)
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        pil_image = Image.fromarray(rgb_frame)
-        
-        prompt = (
-            "Analisis gambar benda yang dipegang ini. Tentukan nama barangnya secara singkat "
-            "dan berikan estimasi harga pasaran wajar dalam bentuk angka bulat (integer) rupiah tanpa titik atau koma. "
-            "Format jawaban HARUS persis seperti ini: [nama_barang]|[harga_angka]. "
-            "Contoh: botol|15000"
-        )
+is_processing = False
+list_pembelian = []
 
-        print("🔍 AI sedang menganalisis benda...")
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[pil_image, prompt]
-        )
-        
-        hasil_teks = response.text.strip()
-        parts = hasil_teks.split("|")
-        
-        if len(parts) == 2:
-            nama_barang = parts[0].strip().lower()
-            harga_barang = int(parts[1].strip())
-            return nama_barang, harga_barang
-        else:
-            return None, None
+def proses_ai_background(frame):
+    global is_processing
+    max_retries = 3
+    delay = 2
+
+    for attempt in range(max_retries):
+        try:
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(rgb_frame)
             
-    except Exception as e:
-        print(f"Error saat menghubungi AI: {e}")
-        return None, None
+            prompt = (
+                "Analisis gambar benda yang dipegang ini. Tentukan nama barangnya secara singkat "
+                "dan berikan estimasi harga pasaran wajar dalam bentuk angka bulat (integer) rupiah tanpa titik atau koma. "
+                "Format jawaban HARUS persis seperti ini: [nama_barang]|[harga_angka]. "
+                "Contoh: botol|15000"
+            )
+
+            print(f"\n🔍 AI sedang menganalisis benda (Percobaan {attempt + 1}/{max_retries})...")
+            response = client.models.generate_content(
+                model='gemini-3.5-flash-lite',
+                contents=[pil_image, prompt]
+            )
+            
+            hasil_teks = response.text.strip()
+            parts = hasil_teks.split("|")
+            
+            if len(parts) == 2:
+                nama_barang = parts[0].strip().lower()
+                harga_barang = int(parts[1].strip())
+                print(f"✨ Berhasil! Terdeteksi: {nama_barang} | Harga: Rp{harga_barang}")
+                list_pembelian.append({"nama": nama_barang, "harga": harga_barang})
+                break  # Berhenti mengulang jika berhasil
+            else:
+                print("❌ Gagal mendeteksi format benda dari AI.")
+                break
+                
+        except Exception as e:
+            print(f"⚠️ Gagal pada percobaan {attempt + 1}: {e}")
+            if attempt < max_retries - 1:
+                print(f"⏳ Menunggu {delay} detik sebelum mencoba ulang...")
+                time.sleep(delay)
+                delay *= 2  # Waktu tunggu bertambah secara berkala (exponential backoff)
+            else:
+                print("❌ Gagal total menghubungi AI setelah beberapa kali percobaan. Silakan coba tekan spasi lagi nanti.")
+    
+    is_processing = False
 
 def main():
-    # Membuka kamera web (0 adalah default webcam laptop/PC)
-    cap = cv2.VideoCapture(0)
+    global is_processing
     
+    cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("❌ Error: Kamera tidak dapat diakses.")
         return
 
-    list_pembelian = []
-    
     print("=" * 50)
-    print("  LIVE SCANNER KAMERA - APLIKASI KASIR AI")
+    print("  LIVE SCANNER KAMERA (WITH THREADING)")
     print("  Arahkan benda ke kamera, lalu TEKAN SPASI untuk scan.")
     print("  Tekan 'q' pada keyboard untuk keluar dan cetak struk.")
     print("=" * 50)
@@ -136,32 +149,34 @@ def main():
             print("❌ Gagal membaca frame dari kamera.")
             break
 
-        # Tampilkan teks petunjuk di layar kamera
-        cv2.putText(frame, "Tekan SPASI untuk Scan | 'q' untuk Selesai", 
-                    (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-        # Tampilkan video live di jendela
+        # Tampilkan status di layar video
+        status_text = "Status: Memproses AI..." if is_processing else "Tekan SPASI untuk Scan | 'q' untuk Selesai"
+        color = (0, 0, 255) if is_processing else (0, 255, 0)
+        
+        cv2.putText(frame, status_text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
         cv2.imshow("Live Scanner - App Pajak", frame)
 
-        # Menangkap tombol keyboard yang ditekan user
         key = cv2.waitKey(1) & 0xFF
         
-        # Jika user menekan tombol 'Spasi' (ASCII 32)
+        # Jika tombol Spasi ditekan dan AI sedang tidak sibuk
         if key == 32:
-            print("\n📸 Memotret benda...")
-            nama, harga = deteksi_benda_dari_frame(frame)
-            
-            if nama and harga:
-                print(f"✨ Berhasil! Terdeteksi: {nama} | Harga: Rp{harga}")
-                list_pembelian.append({"nama": nama, "harga": harga})
-            else:
-                print("❌ Gagal mendeteksi benda, coba posisikan lebih jelas di depan kamera.")
+            if not is_processing:
+                is_processing = True
+                print("\n📸 Memotret benda, mengirim ke background thread...")
                 
-        # Jika user menekan tombol 'q' (keluar)
+                # Jalankan fungsi AI di dalam thread terpisah
+                t = threading.Thread(target=proses_ai_background, args=(frame.copy(),))
+                t.start()
+            else:
+                print("⏳ AI masih memproses foto sebelumnya, mohon tunggu sebentar...")
+                
+        # Jika tombol 'q' ditekan (keluar)
         elif key == ord('q'):
+            # Tunggu sebentar jika thread masih berjalan sebelum keluar
+            if is_processing:
+                print("Menunggu proses AI terakhir selesai...")
             break
 
-    # Lepas kamera dan tutup jendela tampilan
     cap.release()
     cv2.destroyAllWindows()
 
