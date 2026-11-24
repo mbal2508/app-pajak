@@ -180,17 +180,28 @@ def main():
     cap.release()
     cv2.destroyAllWindows()
 
+    subtotal = 0
+    for item in list_pembelian:
+        subtotal += item['harga']
+
+    uang_cust = int(input("\nMasukan jumlah uang yang diberikan! "))
+
+    if uang_cust >= subtotal:
+        kembalian = uang_cust - subtotal
+    else:
+        print("Uang kurang!!! Masukan ulang jumlah uang")
+    
     # Cetak ringkasan hasil belanja
     if list_pembelian:
         print("\n" + "=" * 35)
         print("          STRUK BELANJA AKHIR        ")
         print("=" * 35)
-        subtotal = 0
         for item in list_pembelian:
-            print(f"- {item['nama']} : Rp{item['harga']}")
-            subtotal += item['harga']
+                print(f"- {item['nama']} : Rp{item['harga']}")
         print("-" * 35)
-        print(f"Total Keseluruhan: Rp{subtotal}")
+        print(f"Total Keseluruhan: Rp{subtotal:,}")
+        print(f"Uang Diterima: Rp{uang_cust:,}")
+        print(f"Kembalian: Rp{kembalian:,}")
         print("=" * 35)
     else:
         print("\nTidak ada produk yang di-scan.")
