@@ -184,17 +184,21 @@ def main():
     for item in list_pembelian:
         subtotal += item['harga']
 
-    uang_cust = int(input("\nMasukan jumlah uang yang diberikan! "))
+    while True:
+        print(f"\n💰Total Keseluruhan: Rp{subtotal:,}")
+        uang_cust = int(input("Masukan jumlah uang yang diberikan! "))
 
-    if uang_cust >= subtotal:
-        kembalian = uang_cust - subtotal
-    else:
-        print("Uang kurang!!! Masukan ulang jumlah uang")
+        if uang_cust >= subtotal:
+            kembalian = uang_cust - subtotal
+            break
+        else:
+            print("\nUang kurang!!! Masukan ulang jumlah uang!!!! ")
+            time.sleep(2)
     
     # Cetak ringkasan hasil belanja
     if list_pembelian:
         print("\n" + "=" * 35)
-        print("          STRUK BELANJA AKHIR        ")
+        print("       📃STRUK BELANJA AKHIR📃")
         print("=" * 35)
         for item in list_pembelian:
                 print(f"- {item['nama']} : Rp{item['harga']}")
