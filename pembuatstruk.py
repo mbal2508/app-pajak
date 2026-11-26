@@ -1,5 +1,5 @@
 """
-APP PEMBUAT STRUK KASIR
+APP ReceiptMaker
 
 Workflow:
 1. user menginput produk yang dibeli dengan menampilkan ke camera.
